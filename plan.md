@@ -54,9 +54,30 @@ Los accesos están resueltos (CRM y licencia de Copilot). Esta fase ya no es esc
 | Referente de atención | Persona nombrada, con horas comprometidas por escrito (ver Fase 4 para la cifra). |
 | Repositorio | `git init`. Todo artefacto de este plan versionado desde el día 1. |
 
-**Riesgo real que reemplaza al de accesos:** que el ticket de HubSpot **no tenga tipología poblada**. Si nadie ha venido llenando una propiedad de categoría, la Fase 2 pasa de "agrupar" a "derivar la taxonomía por clustering de asuntos". Se detecta en la primera hora de la Fase 0, no en la Fase 2.
+**Riesgo real que reemplaza al de accesos:** que el ticket de HubSpot no tenga tipología utilizable. Ver 0.1 — es la primera consulta que se corre.
 
-### 0.1 Manejo de datos — proporcionado al riesgo real
+### 0.1 La primera consulta: estado de la tipología
+
+Se ejecuta **antes que cualquier otra cosa del plan**, porque define si la Fase 2 es aritmética o es un ejercicio de clustering.
+
+En HubSpot las propiedades del ticket son de dos clases. Las **automáticas** — `createdate`, `time_to_close`, `hs_first_response_time` — las llena HubSpot y siempre están. Las **manuales** —la categoría del ticket: *consulta de certificados*, *problema de pago*, *cambio de horario*— las tiene que llenar un asesor o un workflow, y pueden simplemente no estar.
+
+Toda la Fase 2 depende de las manuales. Sin categoría no hay top-20 de solicitudes, no hay reparto A/B/C, y no hay minutos direccionables — que es una suma **por tipología**. El número que sustenta la PoC entera se queda sin denominador.
+
+**El caso más probable no es que esté vacía, es que esté sucia.** Lo típico: cuarenta valores de categoría donde tres son `Otro` / `Otros` / `OTRO`, el 60% de los tickets cayendo en el cajón de sastre, y la propiedad poblada solo desde que alguien la volvió obligatoria hace ocho meses. Eso *parece* poblado y pasa cualquier revisión superficial, pero la tipología que produce no sirve.
+
+Por eso la verificación no es *"¿existe la propiedad?"* sino:
+
+> ¿Qué **porcentaje** de tickets la tiene llena, cuál es la **distribución** de valores, y cuánto cae en el **cajón de sastre**?
+
+| Resultado | Consecuencia para la Fase 2 |
+|---|---|
+| Poblada y limpia | Agrupar y sumar. ~1 día. |
+| Sucia o parcial | Derivar la taxonomía agrupando por similitud semántica el campo `subject`. Cuesta 1–2 días más, pero produce una taxonomía que refleja lo que los estudiantes preguntan de verdad, no las categorías que alguien eligió hace dos años. |
+
+**Cómo se lee:** private app token con scope de tickets + API v3 (`/crm/v3/objects/tickets`). Nota para no perder tiempo: el MCP de HubSpot disponible en el entorno de desarrollo es el del CLI `hs` —proyectos, apps, módulos de CMS— y **no lee datos del CRM**. Sirve para la Fase 7, no para esta.
+
+### 0.2 Manejo de datos — proporcionado al riesgo real
 
 Se descarta el pipeline de anonimización (regex + NER + revisión). Para una PoC cuya responsabilidad recae en la UTB y cuyos datos no salen de sistemas que la institución ya tiene contratados, es desproporcionado y se come el cronograma.
 
@@ -93,7 +114,7 @@ Se define la matriz completa, se separa en dos bloques, y **el jefe aprueba la c
 | Criterio | Peso | Copilot Studio | Propio | Se llena en |
 |---|---|---|---|---|
 | Control sobre el retrieval | Alto | | | Fase 5 |
-| Residencia y tratamiento del dato personal | **Crítico** | | | Fase 0.1 / 5 |
+| Residencia y tratamiento del dato personal | **Crítico** | | | Fase 0.2 / 5 |
 | Capacidad de integrar HubSpot / Banner (tipo B) | Alto | | | Fase 5 |
 | Costo total a 3 años (licencias + consumo vs. desarrollo + inferencia + mantenimiento) | Alto | | | Fase 5 |
 | Dependencia de proveedor | Medio | | | Fase 5 |
@@ -262,7 +283,7 @@ Primer despliegue: **el agente le responde al asesor, no al estudiante.**
 
 Si el asesor tiene que salir de HubSpot para consultar el agente, la adopción es cero y el log —que es el punto entero de esta fase— queda vacío.
 
-- **Opción principal:** UI extension de HubSpot (tarjeta en el registro de ticket / conversación). El asesor ve la respuesta sugerida y sus fuentes sin cambiar de pestaña.
+- **Opción principal:** UI extension de HubSpot (tarjeta en el registro de ticket / conversación). El asesor ve la respuesta sugerida y sus fuentes sin cambiar de pestaña. Se construye como proyecto de HubSpot — el CLI `hs` y su MCP son exactamente la herramienta para esto.
 - **Respaldo:** aplicación web interna mínima, si la extensión no se alcanza.
 
 La superficie se decide **antes** de esta fase, no dentro de ella.
