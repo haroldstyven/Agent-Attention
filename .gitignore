@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.env
+
+# Resultados de corridas: se regeneran, y pueden llevar datos del CRM.
+fase0_resultado.md
