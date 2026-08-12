@@ -1,7 +1,7 @@
 # PoC 2 — Agente de atención (Copilot Studio vs. solución propia)
 
 **Autor:** Harold Lagares
-**Fecha:** 10 de agosto de 2026 · *revisión 2: 11 de agosto de 2026*
+**Fecha:** 10 de agosto de 2026 · *rev. 2: 11 de agosto · rev. 3: 12 de agosto de 2026*
 **Naturaleza:** problema abierto y exploratorio — riesgo técnico medio, riesgo de datos medio
 **CRM:** HubSpot · **Track A:** Copilot Studio · **Población:** estudiantes actuales
 **Repositorio:** https://github.com/haroldstyven/Agent-Attention
@@ -49,9 +49,13 @@ Los accesos están resueltos (CRM y licencia de Copilot). Esta fase ya no es esc
 
 | Verificación | Criterio de éxito |
 |---|---|
-| API de HubSpot | Se lee `/crm/v3/objects/tickets` con asociaciones y propiedades de tiempo. Scopes confirmados. |
+| API de HubSpot — tickets | Se lee `/crm/v3/objects/tickets` con asociaciones y propiedades de tiempo. Scope `tickets` confirmado. |
+| API de HubSpot — conversaciones | **Scope aparte.** Los cuerpos de hilo no viven en el objeto ticket sino en la Conversations API, con su propio scope de lectura. Sin él **no existen las 40 preguntas plata** de la Fase 4 y el banco colapsa a 30. Verificar acceso real leyendo un hilo, no solo el scope declarado. |
 | Entorno de Copilot Studio | Se crea un agente de prueba con una knowledge source y responde citando. Se documenta el plan de licenciamiento y el modelo de consumo por mensajes. |
-| Referente de atención | Persona nombrada, con horas comprometidas por escrito (ver Fase 4 para la cifra). |
+| Cuota de mensajes de Copilot | La Fase 6 consume del orden de **200–600 mensajes** solo en evaluación. Confirmar que la capacidad contratada los cubre. Un trial o un pack limitado que se agota a mitad de corrida invalida la comparación. |
+| Portal de HubSpot con proyectos | La UI extension de la Fase 7 no es configuración: es despliegue de app y requiere cuenta de desarrollador y portal habilitado. Saberlo en la semana 1, no en la 10, porque decide entre la opción principal y el respaldo. |
+| Tier de HubSpot / IA nativa | Determina si el anexo de 5.2 se sustenta en capacidades que la UTB ya paga o es especulación. |
+| Referente de atención | Persona nombrada, con horas comprometidas por escrito — **~8 horas**, no 4. Ver 4.5 para el desglose. |
 | Repositorio | `git init`. Todo artefacto de este plan versionado desde el día 1. |
 
 **Riesgo real que reemplaza al de accesos:** que el ticket de HubSpot no tenga tipología utilizable. Ver 0.1 — es la primera consulta que se corre.
@@ -75,6 +79,11 @@ Por eso la verificación no es *"¿existe la propiedad?"* sino:
 | Poblada y limpia | Agrupar y sumar. ~1 día. |
 | Sucia o parcial | Derivar la taxonomía agrupando por similitud semántica el campo `subject`. Cuesta 1–2 días más, pero produce una taxonomía que refleja lo que los estudiantes preguntan de verdad, no las categorías que alguien eligió hace dos años. |
 
+**El corte se fija ahora, antes de ver los datos.** Si el umbral se decide después, se racionaliza la ruta barata: siempre habrá un argumento para llamar "suficientemente limpia" a una propiedad que ahorra dos días de trabajo.
+
+> **Limpia** = ≥70% de los tickets con categoría poblada **y** el valor más frecuente ≤35% del total **y** sin variantes duplicadas del mismo concepto por mayúsculas o tildes.
+> Cualquier condición que falle ⇒ ruta de clustering. Sin discusión posterior.
+
 **Cómo se lee:** private app token con scope de tickets + API v3 (`/crm/v3/objects/tickets`). Nota para no perder tiempo: el MCP de HubSpot disponible en el entorno de desarrollo es el del CLI `hs` —proyectos, apps, módulos de CMS— y **no lee datos del CRM**. Sirve para la Fase 7, no para esta.
 
 ### 0.2 Manejo de datos — proporcionado al riesgo real
@@ -84,30 +93,36 @@ Se descarta el pipeline de anonimización (regex + NER + revisión). Para una Po
 Se sustituye por **dos reglas duras y una página de documentación**:
 
 1. **El índice de recuperación contiene únicamente documentos institucionales.** Reglamentos, calendarios, FAQ, instructivos. Cero datos personales. Esto es gratis: las consultas tipo A son documentales por definición, así que el corpus nunca necesitó datos de estudiantes.
-2. **Las 50–100 preguntas del banco pasan por revisión manual** mientras se están curando de todas formas. Un humano las lee y quita nombres, cédulas, correos y teléfonos. Son ~2 horas, no una tubería de ingeniería.
+2. **Las 70 preguntas del banco pasan por revisión manual** mientras se están curando de todas formas. Un humano las lee y quita nombres, cédulas, correos y teléfonos. Son ~2 horas, no una tubería de ingeniería.
 3. **Se documenta el flujo de datos de cada track** — una página. No es trámite: es la fila *"Residencia y tratamiento del dato"* de la matriz, y hay que llenarla igual.
 
 **Advertencia honesta, sin prejuzgar:** conviene no asumir que el habeas data juega a favor del *build*. El procesamiento dentro del tenant de M365 de la UTB ya está cubierto contractualmente; una solución propia que llama a un modelo externo por API es un **flujo de datos nuevo**. Ese criterio puede terminar puntuando a favor de Copilot. La matriz debe poder llegar a esa conclusión.
 
 Nota de precisión, porque quien revise protección de datos la va a hacer: *anonimizar* no es *pseudonimizar*. Si es reversible, sigue siendo dato personal bajo la Ley 1581.
 
+Y una segunda, del mismo revisor: las preguntas del banco salen de tickets reales de estudiantes. Aunque queden depuradas, la página de flujo de datos debe declarar **la base bajo la cual se usan** —previsiblemente uso compatible con la finalidad original de atención al estudiante, dentro de sistemas que la institución ya opera para eso mismo— y no solo por dónde pasan los datos. Es una frase, pero es la primera que piden.
+
 ---
 
-## Fase 1 — La matriz como instrumento (pesos firmados)
+## Fase 1 — La matriz como instrumento (pesos y aritmética firmados)
 
 **Se hace primero.** Antes de mirar un solo dato.
 
 Se define la matriz completa, se separa en dos bloques, y **el jefe aprueba la columna de pesos antes de que existan los números**. Es la misma lógica de "el banco se define antes de construir", aplicada a los criterios: si los pesos se negocian después, se renegocian para justificar la respuesta que alguien ya prefería.
 
+**Se firman dos cosas, no una: los pesos y la regla de agregación.** Congelar los pesos sin congelar la aritmética deja abierto el mismo hueco con otro nombre y más difícil de detectar — en la Fase 6 ya no se discute cuánto pesa un criterio, se discute cómo se suman, que es la misma negociación disfrazada de tecnicismo. Ver 1.3.
+
 ### Bloque I — Medible sobre el banco de evaluación
 
 | Criterio | Peso | Copilot Studio | Propio | Se llena en |
 |---|---|---|---|---|
-| Exactitud sobre el banco (tipo A) | | | | Fase 6 |
-| Alucinaciones (conteo, no tasa) | **Crítico** | | | Fase 6 |
+| Exactitud sobre el banco (tipo A) | Alto *(propuesto)* | | | Fase 6 |
+| Alucinaciones — compuerta en oro, conteo en el total | **Crítico** | | | Fase 6 |
 | Trazabilidad: cita de fuente verificable | Alto | | | Fase 6 |
 | Abstención correcta ante fuera de alcance | Alto | | | Fase 6 |
-| Consistencia entre corridas repetidas | Medio | | | Fase 6 |
+| Consistencia entre corridas repetidas | Medio | | | Fase 6 *(medición automática)* |
+
+La fila de exactitud es la única sin peso definido en la revisión anterior, y no por descuido inocente: es justo la que la Regla 1 argumenta que **no** debe dominar. Dejarla en blanco significaba llenarla cuando los números ya existieran — el error exacto que esta fase existe para prevenir. Se propone *Alto* y se marca como la fila más disputable de la firma; con la regla de agregación de 1.3 puede ser *Alto* sin atropellar al Bloque II.
 
 ### Bloque II — Estructural (se razona, no se mide)
 
@@ -131,7 +146,34 @@ Se define la matriz completa, se separa en dos bloques, y **el jefe aprueba la c
 
 En el plan original el costo era *Medio*. Sube a *Alto*: es lo que la dirección va a escrutinar. Exige un TCO a 3 años con un supuesto de volumen declarado (sale de la Fase 2), y **el costo del build debe incluir a alguien manteniendo la frescura del índice para siempre** — no solo el desarrollo inicial.
 
-**Entregable:** `matriz_decision.md` con estructura completa, pesos aprobados y celdas vacías. Es el esqueleto que las demás fases llenan.
+### 1.3 La regla de agregación se firma junto con los pesos
+
+*Crítico / Alto / Medio* son etiquetas ordinales. **No se puede calcular un puntaje ponderado con etiquetas.** Mientras la aritmética no esté escrita, la Fase 6 la inventa — y quien la invente después de ver los números elegirá, sin mala fe, la que produce el resultado que ya prefería.
+
+Regla propuesta, en dos pasos y en este orden:
+
+1. **Compuerta.** Todo criterio marcado *Crítico* se evalúa primero. Un track que puntúe por debajo de 3 sobre 5 en cualquier *Crítico* queda descalificado, sin importar su puntaje total. Esto es lo que impide que una brecha de exactitud compre una violación de tratamiento de datos.
+2. **Desempate ponderado** entre los que pasen la compuerta: celdas de 1 a 5, pesos numéricos **Crítico = 5, Alto = 3, Medio = 1**, suma ponderada.
+
+Si ningún track pasa la compuerta, ese *es* el resultado de la PoC y se reporta como tal. La matriz debe poder decir "ninguno de los dos, todavía".
+
+### 1.4 Confusores que la matriz declara de entrada
+
+El Bloque I no mide plataformas. Mide paquetes. Escrito antes de correr nada, para que no se descubra en la sustentación:
+
+- **Los dos tracks no corren el mismo modelo.** Copilot Studio usa el que Microsoft despache; el Track B usa el que se elija. Lo que el Bloque I compara es `plataforma + retrieval + modelo` como bloque indivisible. La Regla 1 ya amortigua la consecuencia, pero el confusor se nombra aquí, no se insinúa.
+- **La línea base solo aísla la contribución del corpus para el Track B.** El modelo de Copilot no es accesible sin retrieval, así que no hay línea base equivalente del lado A. Decirlo evita que el número se lea como algo que no es.
+- **Peso de la asimetría de implementación.** Producto maduro configurado por una persona contra construcción mínima hecha por una persona. Ya está en la Regla 1; se repite aquí porque es la limitación que más fácilmente se olvida al leer solo la matriz.
+
+### 1.5 El umbral de "esto no se hace" también va firmado
+
+El plan pre-compromete pesos, banco y rúbrica, pero hasta esta revisión no comprometía el corte de viabilidad — la única aplicación de su propia lógica que faltaba. Si los minutos direccionables de la Fase 2 salen por debajo de cierto piso, **ninguna** de las dos opciones se justifica y la comparación es un ejercicio académico.
+
+> **Piso de viabilidad: _______ horas/mes de atención direccionable.** Se llena y se firma en la Fase 1, antes de correr la primera consulta de la Fase 2.
+
+Se sugiere derivarlo del costo anual más barato de las dos opciones: si el tiempo liberado vale menos que la licencia, no hay caso. Ese cálculo se puede hacer hoy, con la tarifa del equipo de atención y el precio de lista de Copilot.
+
+**Entregable:** `matriz_decision.md` con estructura completa, pesos aprobados, **regla de agregación escrita**, piso de viabilidad firmado y celdas vacías. Es el esqueleto que las demás fases llenan.
 
 ---
 
@@ -145,7 +187,7 @@ Llena las filas de volumen y el supuesto de costo. Es el primer resultado presen
 |---|---|
 | Volumen y canal | `Tickets` + `Conversations` (inbox), por `hs_pipeline_stage` y fuente |
 | Tipología | propiedad de categoría del ticket — **o derivada por clustering de asuntos si no está poblada** |
-| Tiempo de atención | `time_to_close`, `hs_first_response_time` |
+| Tiempo de atención | **No existe como columna.** Se estima — ver 2.2. `hs_first_response_time` es insumo, no respuesta |
 | Estacionalidad | `createdate` agrupado por semana (matrículas, cierres de periodo) |
 | Resoluciones históricas | cuerpo de la última respuesta del hilo → insumo del banco *plata* (Fase 4) |
 
@@ -164,7 +206,29 @@ La cifra correcta es:
 
 Ese es el número que sustenta el caso, y HubSpot ya tiene las dos columnas que hacen falta.
 
-**Pendiente de precisar:** el denominador de población. La cifra de referencia es **~20.000 registros agregando aspirantes, estudiantes vigentes y egresados**. Hay que desagregarla en esta fase: los tres grupos preguntan cosas distintas, y solo los estudiantes vigentes son la población objetivo de esta PoC. El volumen de solicitudes y el TCO se calculan sobre ese subconjunto, no sobre los 20.000.
+### 2.2 El tiempo de atención no está en HubSpot — y es la mitad de la fórmula
+
+Ésta es la corrección más consecuente de la revisión 3, porque toca el número que sustenta la PoC entera.
+
+`time_to_close` **no es tiempo de atención.** Es reloj de pared entre creación y cierre: incluye colas, fines de semana, y sobre todo la espera de que el estudiante conteste. Un ticket de certificado que le cuesta 3 minutos a un asesor puede tener un `time_to_close` de dos días. HubSpot **no guarda nativamente el tiempo de manejo del agente** — esa columna simplemente no existe.
+
+Si se usa `time_to_close` como el factor de tiempo, los minutos direccionables quedan inflados uno o dos órdenes de magnitud. Y es exactamente el número que la dirección va a auditar primero.
+
+Se estima por triangulación, con el supuesto escrito como supuesto:
+
+| Fuente | Qué aporta |
+|---|---|
+| `hs_first_response_time` | Piso. Acota por debajo, no resuelve. |
+| Número de mensajes del hilo × minutos por mensaje | Estructura. Los minutos por mensaje se calibran preguntándole al referente por tipología. |
+| Muestreo cronometrado de ~20 tickets reales | Ancla empírica. Es media jornada del referente y convierte la estimación en algo defendible. |
+
+**El resultado se reporta como rango, no como cifra puntual**, y la fila de la matriz que dependa de él lleva el rango, no el punto medio.
+
+### 2.3 Qué denominador es cuál
+
+La cifra de referencia de **~20.000 registros agregando aspirantes, estudiantes vigentes y egresados** hay que desagregarla en esta fase: los tres grupos preguntan cosas distintas y solo los estudiantes vigentes son la población objetivo.
+
+Precisión que evita que esa cifra cargue más peso del que soporta: **los 20.000 no entran en la fórmula de minutos direccionables.** Esa fórmula corre sobre *tickets por periodo*, no sobre registros de contacto. El conteo de población sirve para normalizar per cápita y para escalar el TCO — nada más. Tratarla como el denominador del ROI es un error de categoría.
 
 **Entregable:** caracterización de 3–4 páginas con volumetría, tipología, estacionalidad y **minutos direccionables**, integrando los archivos de contexto del caso de telefonía.
 
@@ -181,7 +245,17 @@ En el plan original esto era una fila del registro de riesgos. Es una fase, por 
 
 Un RAG sobre reglamentos vencidos es peor que no tener nada: responde con autoridad y se equivoca. Auditar antes de indexar, no después de que un asesor le mande a un estudiante un requisito derogado.
 
-**Entregable:** inventario del corpus con vigencias, dueños y lista de contradicciones a resolver. Corpus congelado y versionado — misma versión para ambos tracks.
+### 3.1 "Mismo corpus" es una aserción hasta que se verifica
+
+El Track A indexa desde SharePoint con un chunking que no se controla; el Track B indexa local. Decir que ambos ven lo mismo es una hipótesis, y si es falsa contamina toda la comparación de forma invisible — parecerá diferencia de plataforma.
+
+Tres verificaciones, ninguna cara:
+
+1. **Manifiesto con hash por archivo**, versionado en el repo. Antes de cada corrida se confirma que los dos tracks apuntan a las mismas versiones.
+2. **Legibilidad por máquina, documento por documento.** El caso que hay que buscar a propósito: **reglamentos en PDF escaneado sin OCR** — enteramente plausible en una universidad, y quedan invisibles para uno o ambos tracks sin emitir ningún error. Un documento que no rinde texto extraíble se OCR-iza o se marca como fuera del corpus, pero no se deja pasar en silencio.
+3. **Confirmación de indexación completa** en Copilot Studio antes de correr. La indexación de SharePoint tiene latencia propia y puede excluir tipos de archivo; correr sobre un índice a medias mide la impaciencia, no la plataforma.
+
+**Entregable:** inventario del corpus con vigencias, dueños, lista de contradicciones a resolver y **manifiesto de hashes**. Corpus congelado y versionado — misma versión verificada para ambos tracks.
 
 ---
 
@@ -193,10 +267,10 @@ Un RAG sobre reglamentos vencidos es peor que no tener nada: responde con autori
 
 ### 4.1 Banco en dos niveles
 
-No depender de la agenda de una sola persona:
+No depender de la agenda de una sola persona. **El tamaño del banco queda fijo en 70**; en revisiones anteriores derivaba entre 50 y 70 según el párrafo, y es el denominador de todos los números del Bloque I.
 
-- **30 preguntas oro** — extraídas del CRM, respuesta correcta **verificada por el referente de atención**. Costo real: ~4 horas de esa persona. Esa cifra va comprometida en la Fase 0.
-- **40 preguntas plata** — extraídas del CRM con su resolución histórica *como* respuesta de referencia. Menor confianza, cero costo de agenda. Se marcan como tales y se reportan por separado.
+- **30 preguntas oro** — extraídas del CRM, respuesta correcta **verificada por el referente de atención**. ~4 horas de esa persona, solo para esta parte.
+- **40 preguntas plata** — extraídas del CRM con su resolución histórica *como* respuesta de referencia. Requieren lectura de hilos de conversación, que es un scope de API distinto al de tickets: si no está disponible (Fase 0), esta mitad del banco no existe. Menor confianza, cero costo de agenda. Se marcan como tales y se reportan por separado.
 
 **Incluir a propósito casos difíciles:** preguntas ambiguas, preguntas fuera de alcance, preguntas con datos personales, y preguntas cuya respuesta correcta es *"no sé, escala a un humano"*.
 
@@ -204,11 +278,12 @@ No depender de la agenda de una sola persona:
 
 La meta original —≤2%— es **inmedible** con este tamaño de muestra: 2% de 50 preguntas es *una*, y con un solo fallo el intervalo de confianza al 95% va de 0% a ~10%. Un número no verificable en un criterio marcado *Crítico* es peor que no tener número.
 
-Se reemplaza por una compuerta contable:
+Se reemplaza por una compuerta contable. Y hay que ser preciso en qué es compuerta y qué es conteo, porque la revisión 2 usaba las dos lecturas en párrafos distintos del mismo documento — con un criterio marcado *Crítico*, esa ambigüedad decide sola el resultado de la PoC:
 
-> **Cero respuestas con fuente citada que no sustente la respuesta, en las preguntas tipo A.**
+> **Compuerta:** cero respuestas con fuente citada que no sustente la respuesta, sobre las **30 preguntas oro**. Reprobarla descalifica al track, vía la regla de 1.3.
+> **Conteo comparativo:** el número absoluto de esas respuestas sobre las 70. No descalifica; discrimina entre tracks que hayan pasado la compuerta.
 
-Es más exigente, más honesta y sí se puede verificar leyendo 50 respuestas.
+Así el criterio sirve para las dos cosas que se le piden —vetar y comparar— sin que una lectura se coma a la otra. Es más exigente que un porcentaje, más honesto, y se verifica leyendo respuestas.
 
 ### 4.3 Protocolo de calificación — ciego
 
@@ -216,10 +291,36 @@ Es la mitigación más barata y creíble contra el sesgo hacia la solución prop
 
 - El referente califica **sin saber qué sistema produjo cada respuesta**. Salidas mezcladas y etiquetadas A/B al azar.
 - Rúbrica escrita antes de la corrida: exactitud, fundamentación en la fuente citada, alucinación, abstención correcta.
-- **Cada pregunta se corre 2–3 veces.** Estos sistemas no son deterministas y la varianza es un hallazgo, no ruido.
-- **Línea base incluida en la mezcla:** el modelo sin retrieval, respondiendo a pelo. Es casi gratis y es lo único que dice si la inversión en corpus fue la que pagó. Sin ella, dos tracks en 85% no se pueden interpretar.
+- **Cada pregunta se corre 2–3 veces.** Estos sistemas no son deterministas y la varianza es un hallazgo, no ruido. Pero **solo una corrida se califica a mano** — ver 4.5.
+- **La consistencia entre corridas se mide sola.** Comparar programáticamente las salidas repetidas y las fuentes citadas no necesita humano. Esa fila del Bloque I sale de un script, no de la agenda del referente.
+- **Línea base incluida en la mezcla:** el mismo modelo del Track B, sin retrieval, respondiendo a pelo. Se especifica cuál es en la rúbrica, y se declara su límite: como el modelo de Copilot no es accesible desnudo, la línea base dice si el corpus pagó **para el Track B**, no para ambos. Aun así es casi gratis y sin ella dos tracks en 85% no se pueden interpretar.
 
-**Entregable:** `banco_evaluacion.jsonl` + `rubrica.md` + protocolo de calificación ciega. **Congelado antes de la Fase 5.**
+### 4.4 Chequeo de respondibilidad, antes de congelar
+
+Una pregunta cuya respuesta no está en el corpus congelado no mide plataformas: mide el corpus. Si entra al denominador de exactitud, ambos tracks pierden puntos por una razón que no tiene nada que ver con la decisión build/buy.
+
+Antes de congelar, un humano verifica pregunta por pregunta si la respuesta **existe** en el corpus de la Fase 3. Las que no, salen del denominador y entran a un balde aparte.
+
+**Ese balde no es descarte, es hallazgo.** El porcentaje de solicitudes reales que ningún documento institucional puede responder hoy es un número de negocio que esta PoC produce casi gratis, y que hasta esta revisión el plan iba a tirar a la basura como ruido de medición. Va en la caracterización y probablemente sea de las cosas más accionables que salgan de todo el ejercicio.
+
+### 4.5 Presupuesto real del referente
+
+La revisión 2 comprometía ~4 horas en la Fase 0 y después le pedía a la misma persona calificar a ciegas. Las cuentas no daban:
+
+> 70 preguntas × 3 sistemas (Copilot, propio, línea base) × 3 corridas = **630 respuestas**. A un minuto cada una son 10 horas y media — sobre un compromiso de 4.
+
+El presupuesto se corrige y el diseño se ajusta para caber en él:
+
+| Actividad | Costo |
+|---|---|
+| Verificar las 30 respuestas oro | ~4 h |
+| Calificación ciega de **una sola corrida**: 70 × 3 = 210 ítems | ~3,5 h |
+| Muestreo cronometrado de ~20 tickets (Fase 2.2) | ~0,5 h |
+| **Total comprometido en Fase 0** | **~8 h** |
+
+Las corridas 2 y 3 se conservan —la varianza sigue siendo un hallazgo— pero se explotan por comparación automática, no por lectura humana.
+
+**Entregable:** `banco_evaluacion.jsonl` + `rubrica.md` + protocolo de calificación ciega + registro de preguntas excluidas por no respondibilidad. **Congelado antes de la Fase 5.**
 
 ---
 
@@ -233,6 +334,8 @@ Sin esto la comparación no es válida:
 - Toda respuesta cita la fuente.
 - Existe una condición explícita de abstención, con la misma definición de "fuera de alcance" en los dos.
 - Mismo alcance: solo tipo A.
+- **Mismo corpus verificado**, no asumido: hashes cotejados e indexación confirmada en ambos lados antes de correr (3.1).
+- **Se registra qué modelo corre cada track.** No van a ser el mismo y eso no se puede evitar, pero sí declarar: es el confusor de 1.4 y va escrito en la matriz, no descubierto en la sustentación.
 
 ### Track A — Copilot Studio (*buy*)
 
@@ -265,11 +368,16 @@ Copilot Studio no integra nativamente con HubSpot: requiere conector personaliza
 - Corrida de ambos tracks + línea base contra el banco congelado.
 - Calificación ciega por el referente según la rúbrica.
 - Llenado del Bloque I. Cierre del Bloque II con la evidencia de la Fase 5.
-- Aplicación de los pesos aprobados en la Fase 1 — **sin renegociarlos.**
+- Aplicación de los pesos **y de la regla de agregación** aprobados en la Fase 1 — **sin renegociar ninguno de los dos.**
+- Verificación de la compuerta de 1.3 antes de cualquier suma: si un track cae por debajo de 3 en un criterio *Crítico*, queda descalificado y el ponderado ya no se discute.
 
-**Resultado esperado:** el escenario más probable no es "uno u otro" sino **híbrido** — Copilot Studio para consultas informativas internas donde la licencia ya está pagada y el dato no sale del tenant, y solución propia para lo que toca datos de estudiantes e integración con HubSpot. La matriz debe poder sustentar eso con evidencia, no con preferencia técnica.
+### 6.1 Sobre la hipótesis de trabajo
 
-Si la evidencia apunta a otra parte, se reporta lo que dice la evidencia.
+La revisión 2 anunciaba aquí, bajo el rótulo *"resultado esperado"*, que el desenlace más probable era un híbrido. Escribir el resultado antes de la evidencia, en un documento cuya venta entera es la disciplina anti-sesgo, es exactamente el párrafo que un revisor escéptico usa para desacreditar todo lo demás. Se reclasifica:
+
+> **Hipótesis de trabajo, no predicción y no resultado esperado:** que la respuesta sea un híbrido — Copilot Studio para consultas informativas internas donde la licencia ya está pagada y el dato no sale del tenant, solución propia para lo que toca datos de estudiantes e integración con HubSpot.
+
+Se declara aquí precisamente para que quede registrada como sesgo del autor y sea auditable contra el resultado, que es el único uso legítimo de una corazonada en este documento. **Si la evidencia apunta a otra parte, se reporta lo que dice la evidencia** — incluida la posibilidad, contemplada en 1.3, de que ningún track pase la compuerta.
 
 **Entregable:** matriz diligenciada + recomendación de una página. **Este es el artefacto que autoriza —o no— la construcción.**
 
@@ -286,7 +394,7 @@ Si el asesor tiene que salir de HubSpot para consultar el agente, la adopción e
 - **Opción principal:** UI extension de HubSpot (tarjeta en el registro de ticket / conversación). El asesor ve la respuesta sugerida y sus fuentes sin cambiar de pestaña. Se construye como proyecto de HubSpot — el CLI `hs` y su MCP son exactamente la herramienta para esto.
 - **Respaldo:** aplicación web interna mínima, si la extensión no se alcanza.
 
-La superficie se decide **antes** de esta fase, no dentro de ella.
+La superficie se decide **antes** de esta fase, no dentro de ella — y la *factibilidad* se verifica todavía antes, en la Fase 0. La UI extension no es configuración: requiere cuenta de desarrollador y portal con proyectos habilitados. Descubrir que el portal no lo soporta en la semana 10 cuesta una fase; descubrirlo en la semana 1 cuesta veinte minutos y solo cambia una decisión de diseño.
 
 ### 7.2 El principio anti-refactorización
 
@@ -321,14 +429,16 @@ Para que la decisión de hoy no cierre puertas:
 
 ## Métricas de éxito
 
-| Métrica | Meta |
-|---|---|
-| Exactitud sobre banco oro (tipo A) | ≥ 80% |
-| Respuestas con fuente citada que no la sustenta | **0** en tipo A |
-| Abstención correcta ante fuera de alcance | ≥ 90% |
-| Minutos de atención direccionables | Cuantificado con evidencia de HubSpot |
-| Matriz | Diligenciada con pesos aprobados *antes* de los números |
-| Decisión build/buy | Sustentada en la matriz, no en preferencia técnica |
+Cada meta dice explícitamente **sobre quién** aplica. Una meta sin sujeto se interpreta después, y se interpreta a conveniencia.
+
+| Métrica | Meta | Sujeto |
+|---|---|---|
+| Exactitud sobre banco oro (tipo A) | ≥ 80% | **Al menos un track.** Que ninguno llegue es el go/no-go de la tecnología, y es independiente de cuál gane |
+| Respuestas con fuente citada que no la sustenta | **0** | Compuerta, por track, sobre las 30 oro (ver 4.2) |
+| Abstención correcta ante fuera de alcance | ≥ 90% | Por track |
+| Minutos de atención direccionables | Cuantificado como **rango**, por triangulación (2.2), y contrastado contra el piso de viabilidad de 1.5 | La PoC |
+| Matriz | Diligenciada con pesos **y regla de agregación** aprobados *antes* de los números | La PoC |
+| Decisión build/buy | Sustentada en la matriz, no en preferencia técnica. "Ninguno de los dos, todavía" es un resultado válido | La PoC |
 
 ---
 
@@ -336,21 +446,42 @@ Para que la decisión de hoy no cierre puertas:
 
 Las fechas son secundarias; el orden no. Lo que gatilla cada fase:
 
+El grafo de la revisión 2 dibujaba las fases 2, 3 y 4 como hermanas paralelas. **Es falso y el propio texto lo contradecía:** las preguntas plata salen de las resoluciones históricas que extrae la Fase 2, y el chequeo de respondibilidad de 4.4 exige el corpus congelado de la Fase 3. La Fase 4 es hija de las otras dos, no su hermana. Corregido:
+
 ```
-0 Verificación ──> 1 Matriz + pesos firmados
+0 Verificación ──> 1 Matriz: pesos + regla de agregación + piso de viabilidad (firmados)
                         │
-                        ├──> 2 Caracterización HubSpot ──┐
-                        │                                 ├──> 6 Corrida + matriz ──> 7 Prototipo
-                        ├──> 3 Corpus auditado ──┐        │
-                        │                         ├──> 5 Tracks A/B ──┘
-                        └──> 4 Banco + rúbrica ───┘
+                        ├──> 2 Caracterización HubSpot ──┬──> 4 Banco + rúbrica ──[CONGELADO]──┐
+                        │                                │                                      │
+                        └──> 3 Corpus auditado ──────────┤                                      ├──> 6 Corrida + matriz ──> 7 Prototipo
+                                                         │                                      │
+                                                         └──> 5 Tracks A/B ─────────────────────┘
 ```
 
+La Fase 2 alimenta además, en la 6, las filas de volumen y TCO de la matriz.
+
 **Cortes duros:**
-- La Fase 1 va antes que todo. Los pesos se firman sin números sobre la mesa.
+- La Fase 1 va antes que todo. Los pesos **y la aritmética que los combina** se firman sin números sobre la mesa. Firmar unos sin la otra no cierra nada.
 - La Fase 3 va antes que la 5. No se indexa un corpus sin auditar.
+- La Fase 4 no se puede congelar sin la 2 (preguntas plata) ni sin la 3 (respondibilidad).
 - La Fase 4 se **congela** antes de que arranque la 5. Es la única defensa contra el sesgo.
 - La Fase 7 no arranca sin la recomendación de la 6.
+
+### Presupuesto de tiempo — pendiente de declarar
+
+El §2.1 justifica sacar LangGraph y MCP porque "consumen la mayor parte del tiempo disponible", pero ese tiempo **nunca se declara en ninguna parte del plan**. Un argumento de alcance apoyado en un presupuesto invisible no es verificable.
+
+Estimación honesta para una persona: **8–12 semanas** para las fases 0 a 7, con la 3, la 4 y la 5 llevándose la mayor parte.
+
+> **Presupuesto real disponible: _______ semanas.** Se declara antes de arrancar la Fase 2.
+
+Si el presupuesto es menor, el recorte se decide ahora y no sobre la marcha. En orden de sacrificio:
+
+1. **Fase 7** — sale completa. La decisión build/buy no la necesita; el artefacto que autoriza la inversión es la matriz de la Fase 6.
+2. **Banco reducido a 30 oro** — se pierden las plata y con ellas robustez estadística, pero el Bloque I sigue siendo interpretable y se ahorra la dependencia del scope de conversaciones.
+3. **Una sola corrida** — se pierde la fila de consistencia. Es la de peso *Medio*, así que es la más barata de perder.
+
+Lo que **no** se recorta bajo ninguna presión de cronograma: la auditoría del corpus (Fase 3), el congelamiento del banco antes de construir, y la calificación ciega. Recortar cualquiera de esas tres convierte la PoC en una opinión con tablas.
 
 ---
 
@@ -358,8 +489,14 @@ Las fechas son secundarias; el orden no. Lo que gatilla cada fase:
 
 | Riesgo | Impacto | Mitigación |
 |---|---|---|
-| El referente de atención no aparece | **Alto** | Horas comprometidas por escrito en Fase 0. Banco en dos niveles: las 40 *plata* no dependen de su agenda. |
-| Tickets de HubSpot sin tipología poblada | Alto | Se detecta en Fase 0. Plan B: derivar taxonomía por clustering de asuntos. |
+| El referente de atención no aparece | **Alto** | **8 horas** comprometidas por escrito en Fase 0, con el desglose de 4.5 a la vista. Banco en dos niveles: las 40 *plata* no dependen de su agenda. |
+| **El aprobador de pesos no firma a tiempo** | **Alto** | Bloquea las ocho fases y no estaba en esta tabla. Default explícito: si no hay firma en 5 días hábiles, se procede con los pesos y la regla de agregación marcados como *propuestos, no firmados*, y la matriz final lo declara en su encabezado. |
+| **Se usa `time_to_close` como tiempo de atención** | **Alto** | Infla el número principal uno o dos órdenes de magnitud. Prohibido por 2.2: triangulación de tres fuentes y reporte por rango. |
+| Tickets de HubSpot sin tipología poblada | Alto | Se detecta en Fase 0, con umbral numérico fijado *antes* de ver los datos (0.1). Plan B: derivar taxonomía por clustering de asuntos. |
+| **El banco termina midiendo el corpus, no las plataformas** | Alto | Chequeo de respondibilidad antes de congelar (4.4). Las no respondibles salen del denominador y se reportan como hallazgo aparte. |
+| **Los dos tracks no indexan lo mismo** | Alto | Manifiesto de hashes, verificación de texto extraíble —el caso a cazar es el PDF escaneado sin OCR— y confirmación de indexación completa antes de correr (3.1). |
+| **La cuota de mensajes de Copilot se agota a mitad de evaluación** | Medio | Se dimensiona en Fase 0 contra las ~200–600 respuestas que consume la Fase 6. |
+| **El scope de conversaciones no está disponible** | Medio | Se verifica en Fase 0 leyendo un hilo real. Si falla, el banco se reduce a 30 oro y se declara en la matriz — no se descubre en la Fase 4. |
 | Corpus documental vencido o contradictorio | Alto | Fase 3 propia. Auditar antes de indexar. |
 | Comparación sesgada hacia la solución propia | Alto | Banco congelado antes de construir + calificación ciega + pesos firmados antes de los números. |
 | Track A queda como espantapájaros | Alto | Copilot Studio (no Copilot chat) con conector, no solo grounding en SharePoint. |
@@ -377,6 +514,7 @@ Una fase está hecha cuando:
 3. Los supuestos están escritos y marcados como tales.
 4. Alguien distinto al autor pudo usarlo o entenderlo sin acompañamiento.
 5. Las filas de la matriz que le correspondían quedaron llenas o marcadas como no medibles con la razón.
+6. Los confusores y supuestos que la fase introdujo quedaron declarados en la matriz, no en la cabeza del autor.
 
 ---
 
@@ -387,3 +525,8 @@ Una fase está hecha cuando:
 3. **¿Hay restricción institucional para que consultas de estudiantes salgan del tenant de la UTB?** Determina si el Track B necesita modelo local o si un proveedor externo es aceptable.
 4. **¿Hay iniciativa previa de chatbot en la UTB?** Sus resultados son evidencia gratis, y su fracaso —si lo hubo— es un riesgo político a nombrar antes, no después.
 5. **¿Quién es el dueño del contenido documental y con qué frecuencia se actualiza?** Es un costo permanente del *build* que va en la fila de TCO.
+
+Y dos que **no son preguntas abiertas sino decisiones pendientes de firma**, con fecha límite propia porque bloquean el arranque:
+
+6. **¿Cuál es el piso de viabilidad en horas/mes?** Se firma en la Fase 1, antes de la primera consulta de la Fase 2. Sin él, cualquier cifra que salga se declarará suficiente a posteriori. Ver 1.5.
+7. **¿Cuántas semanas hay realmente?** Determina si el plan corre completo o entra el recorte de la sección de presupuesto. Se declara antes de la Fase 2.
