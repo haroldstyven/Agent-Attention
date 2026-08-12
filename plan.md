@@ -81,8 +81,17 @@ Por eso la verificación no es *"¿existe la propiedad?"* sino:
 
 **El corte se fija ahora, antes de ver los datos.** Si el umbral se decide después, se racionaliza la ruta barata: siempre habrá un argumento para llamar "suficientemente limpia" a una propiedad que ahorra dos días de trabajo.
 
-> **Limpia** = ≥70% de los tickets con categoría poblada **y** el valor más frecuente ≤35% del total **y** sin variantes duplicadas del mismo concepto por mayúsculas o tildes.
+> **Limpia** = las cuatro condiciones a la vez:
+> 1. ≥70% de los tickets con la categoría poblada.
+> 2. El concepto más frecuente ≤35% del total.
+> 3. **El cajón de sastre —*otro*, *otros*, *general*, *sin clasificar*— ≤25%, sumadas todas sus grafías.**
+> 4. Sin variantes duplicadas del mismo concepto por mayúsculas, tildes o plural.
+>
 > Cualquier condición que falle ⇒ ruta de clustering. Sin discusión posterior.
+
+La condición 3 no estaba en la revisión 3 y la destapó la prueba del script: una propiedad puede estar 100% poblada, sin ningún valor por encima del 35%, y aun así tener la mitad de los tickets en el cajón de sastre repartido entre *Otro* y *Otros*. Pasaba el umbral y no servía para nada. Es exactamente el caso que el párrafo de arriba describe en prosa y que las tres condiciones originales no atrapaban.
+
+**Las grafías se colapsan antes de contar.** *Otro*, *Otros* y *OTRO* son un concepto, no tres. Medido sin colapsar, el cajón de sastre se ve la mitad de grande de lo que es — en la prueba, 58% en vez de 82%.
 
 **Cómo se lee:** private app token con scope de tickets + API v3 (`/crm/v3/objects/tickets`). Nota para no perder tiempo: el MCP de HubSpot disponible en el entorno de desarrollo es el del CLI `hs` —proyectos, apps, módulos de CMS— y **no lee datos del CRM**. Sirve para la Fase 7, no para esta.
 
